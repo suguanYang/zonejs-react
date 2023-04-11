@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vite + React</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/javascript">
+    const MessagePort = window['MessagePort'];
+    if (typeof MessagePort !== 'undefined' && MessagePort.prototype) {
+      Object.defineProperty(MessagePort.prototype, 'zones', {
+        configurable: true,
+        enumerable: true,
+        value: {},
+      });
+
+      // Custom message handler to pick up zone from patched event and execute callback in it
+      function handleMessage(callback, event) {
+        const isPatchMessage = (message) =>
+          typeof message === 'object' && message !== null && 'zoneName' in message;
+
+        if (typeof callback !== 'function') {
+          return;
+        }
+        if (isPatchMessage(event.data)) {
+          this.zones[event.data.zoneName].run(() => {
+            const unpackedEvent = new MessageEvent('message', {
+              bubbles: event.bubbles,
+              source: event.source,
+              data: event.data.originalMessage,
+              composed: event.composed,
+              origin: event.origin,
+              lastEventId: event.lastEventId,
+              cancelable: event.cancelable,
+            });
+            callback(unpackedEvent);
+          });
+        } else {
+          callback(event);
+        }
+      }
+
+      // Patch onmessage property to wrap event listener and get Zone name from event data
+      const originalOnMessageDesc = Object.getOwnPropertyDescriptor(MessagePort.prototype, 'onmessage');
+      Object.defineProperty(MessagePort.prototype, 'onmessage', {
+        configurable: originalOnMessageDesc?.configurable,
+        enumerable: originalOnMessageDesc?.enumerable,
+        set(callback) {
+          originalOnMessageDesc?.set?.call(this, handleMessage.bind(this, callback));
+        },
+        get() {
+          return originalOnMessageDesc?.get;
+        },
+      });
+
+      // Patch postMessage to pass zoneName to custom message handler
+      const nativePostMessage = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function patchedPostMessage(message) {
+        debugger
+        this.zones[Zone.current.name] = Zone.current;
+        nativePostMessage.call(this, { originalMessage: message, zoneName: Zone.current.name });
+      };
+    }
+  </script>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
